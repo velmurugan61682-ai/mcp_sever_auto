@@ -3,7 +3,7 @@ dotenv.config();
 
 export const config = {
   port: process.env.PORT || 5000,
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  clientUrl: process.env.CLIENT_URL || 'https://mcp-client-auto.vercel.app',
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/mcp_ai',
   jwtSecret: process.env.JWT_SECRET || 'mcp_ai_super_secret_jwt_key_2026_change_in_production',
   jwtExpiresIn: '7d',

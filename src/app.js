@@ -25,7 +25,9 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // CORS configuration
 app.use(
   cors({
-    origin: config.clientUrl || '*',
+    origin: (origin, callback) => {
+      callback(null, true);
+    },
     credentials: true
   })
 );
