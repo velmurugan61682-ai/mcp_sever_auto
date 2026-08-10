@@ -108,24 +108,7 @@ export const processChatMessageWithDeepSeek = async ({
     // Simple heuristic tool selection if user prompt implies tool usage
     const lowerPrompt = userMessageText.toLowerCase();
 
-    if (lowerPrompt.includes('channelbot') || lowerPrompt.includes('youtube')) {
-      emitProgress('chat_status', { status: 'tool_execution', message: 'Executing tool: get_channelbot_users' });
-      const toolRes = await safeExecuteTool({
-        userId,
-        conversationId,
-        toolName: 'get_channelbot_users',
-        args: { limit: 5 }
-      });
-      executedToolCalls.push({
-        id: 'call_channelbot_' + Date.now(),
-        name: 'get_channelbot_users',
-        args: { limit: 5 },
-        result: toolRes.result,
-        status: toolRes.success ? 'success' : 'error',
-        durationMs: toolRes.durationMs
-      });
-      assistantContent = `ChannelBot External Users Data:\n\`\`\`json\n${JSON.stringify(toolRes.result, null, 2)}\n\`\`\``;
-    } else if (lowerPrompt.includes('crm') || lowerPrompt.includes('lead')) {
+    if (lowerPrompt.includes('crm') || lowerPrompt.includes('lead')) {
       emitProgress('chat_status', { status: 'tool_execution', message: 'Executing tool: create_crm_lead' });
       const toolRes = await safeExecuteTool({
         userId,
@@ -211,7 +194,7 @@ export const processChatMessageWithDeepSeek = async ({
       });
       assistantContent = `Connected Apps Overview:\n\`\`\`json\n${JSON.stringify(toolRes.result, null, 2)}\n\`\`\``;
     } else {
-      assistantContent = `Hello! I am your mcp.ai assistant. Connected MCP Tools: ${mcpTools.map((t) => `\`${t.name}\``).join(', ')}.\n\nYou can ask me to:\n- Show all connected MCP servers\n- Get the latest ChannelBot users\n- Create a CRM lead from this conversation\n- List tools available from MongoDB\n- Check the health of all MCP servers`;
+      assistantContent = `Hello! I am your mcp.ai assistant. Connected MCP Tools: ${mcpTools.map((t) => `\`${t.name}\``).join(', ')}.\n\nYou can ask me to:\n- Show all connected MCP servers\n- Create a CRM lead from this conversation\n- List tools available from MongoDB\n- Check the health of all MCP servers`;
     }
 
     const assistantMsg = await Message.create({

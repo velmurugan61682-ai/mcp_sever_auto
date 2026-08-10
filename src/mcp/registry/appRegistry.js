@@ -170,19 +170,6 @@ export const APP_REGISTRY = [
     ]
   },
   {
-    appId: 'channelbot.in',
-    appName: 'channelbot.in',
-    provider: 'channelbot',
-    connectionType: 'api_key',
-    appIcon: 'Bot',
-    description: 'WhatsApp & Omnichannel Bot Platform Connector for customer broadcasts and bot triggers.',
-    requiredPermissions: ['read_messages', 'send_broadcasts'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'apiKey', label: 'ChannelBot API Key', type: 'password', required: true }
-    ]
-  },
-  {
     appId: 'mongoose',
     appName: 'MongoDB',
     provider: 'mongodb',

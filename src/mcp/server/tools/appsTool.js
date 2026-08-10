@@ -32,7 +32,6 @@ export const executeListConnectedApps = async (args, contextUserId) => {
   }
 
   const defaultAppsList = [
-    { appId: 'channelbot.in', appName: 'channelbot.in', description: 'WhatsApp & Omnichannel Bot Platform Connector' },
     { appId: 'tiktok', appName: 'TikTok', description: 'TikTok Content & Analytics Integration' },
     { appId: 'mongoose', appName: 'mongoose', description: 'MongoDB Direct Model Inspector & Data Query Engine' },
     { appId: 'custom_rest', appName: 'Custom REST API', description: 'Generic REST API Endpoints Connector' },

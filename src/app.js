@@ -13,7 +13,6 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import crmRoutes from './routes/crmRoutes.js';
 import automationRoutes from './routes/automationRoutes.js';
-import channelbotRoutes from './routes/channelbotRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import { createBuiltinMCPServer, BUILTIN_TOOLS, BUILTIN_RESOURCES, BUILTIN_PROMPTS } from './mcp/server/mcpServer.js';
 
@@ -57,7 +56,6 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/automations', automationRoutes);
-app.use('/api/channelbot', channelbotRoutes);
 app.use('/api/audit', auditRoutes);
 app.get('/api/unified-inbox', protect, getUnifiedInboxController);
 

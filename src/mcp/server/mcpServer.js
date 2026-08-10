@@ -4,7 +4,6 @@ import { getTimeToolDefinition, executeGetTime } from './tools/timeTool.js';
 import { calculatorToolDefinition, executeCalculator } from './tools/calculatorTool.js';
 import { searchNotesToolDefinition, createNoteToolDefinition, executeSearchNotes, executeCreateNote } from './tools/notesTool.js';
 import { listConnectedAppsToolDefinition, executeListConnectedApps } from './tools/appsTool.js';
-import { channelbotToolDefinition, executeChannelbotTool } from './tools/channelbotTool.js';
 import { createCrmLeadToolDefinition, executeCreateCrmLead } from './tools/crmTool.js';
 
 export const BUILTIN_TOOLS = [
@@ -13,7 +12,6 @@ export const BUILTIN_TOOLS = [
   searchNotesToolDefinition,
   createNoteToolDefinition,
   listConnectedAppsToolDefinition,
-  channelbotToolDefinition,
   createCrmLeadToolDefinition
 ];
 
@@ -122,9 +120,6 @@ export const createBuiltinMCPServer = () => {
         case 'list_connected_apps':
           result = await executeListConnectedApps(args, userId);
           break;
-        case 'get_channelbot_users':
-          result = await executeChannelbotTool(args, userId);
-          break;
         case 'create_crm_lead':
           result = await executeCreateCrmLead(args, userId);
           break;
@@ -169,12 +164,9 @@ export const executeBuiltinToolDirect = async (toolName, args, userId) => {
       return await executeCreateNote(args, userId);
     case 'list_connected_apps':
       return await executeListConnectedApps(args, userId);
-    case 'get_channelbot_users':
-      return await executeChannelbotTool(args, userId);
     case 'create_crm_lead':
       return await executeCreateCrmLead(args, userId);
     default:
       throw new Error(`Direct tool execution error: Unknown tool '${toolName}'`);
   }
 };
-
