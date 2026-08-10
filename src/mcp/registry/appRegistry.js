@@ -14,32 +14,6 @@ export const APP_REGISTRY = [
     ]
   },
   {
-    appId: 'gcalendar',
-    appName: 'Google Calendar',
-    provider: 'google',
-    connectionType: 'oauth',
-    appIcon: 'Calendar',
-    description: 'Schedule events, inspect availability, set reminders, and query upcoming meetings.',
-    requiredPermissions: ['https://www.googleapis.com/auth/calendar.events'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'clientId', label: 'OAuth Client ID', type: 'text', required: true }
-    ]
-  },
-  {
-    appId: 'gdrive',
-    appName: 'Google Drive',
-    provider: 'google',
-    connectionType: 'oauth',
-    appIcon: 'HardDrive',
-    description: 'Search documents, read spreadsheets, list folder contents, and analyze cloud files.',
-    requiredPermissions: ['https://www.googleapis.com/auth/drive.readonly'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'clientId', label: 'OAuth Client ID', type: 'text', required: true }
-    ]
-  },
-  {
     appId: 'slack',
     appName: 'Slack',
     provider: 'slack',
@@ -50,19 +24,6 @@ export const APP_REGISTRY = [
     requiresConfig: true,
     configFields: [
       { name: 'botToken', label: 'Slack Bot User Token (xoxb-...)', type: 'password', required: true }
-    ]
-  },
-  {
-    appId: 'notion',
-    appName: 'Notion',
-    provider: 'notion',
-    connectionType: 'api_key',
-    appIcon: 'FileText',
-    description: 'Query database tables, create documents, inspect page hierarchies, and update tasks.',
-    requiredPermissions: ['read_content', 'write_content'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'integrationToken', label: 'Notion Internal Integration Token', type: 'password', required: true }
     ]
   },
   {
@@ -92,32 +53,6 @@ export const APP_REGISTRY = [
     ]
   },
   {
-    appId: 'youtube',
-    appName: 'YouTube',
-    provider: 'google',
-    connectionType: 'oauth',
-    appIcon: 'Youtube',
-    description: 'Fetch video analytics, list playlists, moderate comments, and track channel metrics.',
-    requiredPermissions: ['https://www.googleapis.com/auth/youtube.readonly'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'apiKey', label: 'YouTube Data API Key', type: 'password', required: true }
-    ]
-  },
-  {
-    appId: 'tiktok',
-    appName: 'TikTok',
-    provider: 'tiktok',
-    connectionType: 'oauth',
-    appIcon: 'Video',
-    description: 'Fetch channel analytics, published video statistics, comments, and publish video captions.',
-    requiredPermissions: ['user.info.basic', 'video.list'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'accessToken', label: 'TikTok Access Token', type: 'password', required: true }
-    ]
-  },
-  {
     appId: 'whatsapp',
     appName: 'WhatsApp',
     provider: 'meta',
@@ -128,6 +63,21 @@ export const APP_REGISTRY = [
     requiresConfig: true,
     configFields: [
       { name: 'permanentToken', label: 'Meta WhatsApp Business Token', type: 'password', required: true }
+    ]
+  },
+  {
+    appId: 'channelbot.in',
+    appName: 'channelbot.in',
+    provider: 'channelbot',
+    connectionType: 'webhook_api',
+    appIcon: 'channelbot',
+    logoUrl: '/channelbot-logo.png',
+    description: 'AI-powered YouTube comment automation, channel moderation, and omnichannel lead bot.',
+    requiredPermissions: ['read_comments', 'auto_reply', 'webhook_receive', 'channel_analytics'],
+    requiresConfig: true,
+    configFields: [
+      { name: 'apiKey', label: 'ChannelBot API Key / Webhook Secret', type: 'password', required: true },
+      { name: 'channelId', label: 'YouTube Channel ID', type: 'text', required: false }
     ]
   },
   {
@@ -142,43 +92,6 @@ export const APP_REGISTRY = [
     configFields: [
       { name: 'accessToken', label: 'Instagram Graph Token', type: 'password', required: true }
     ]
-  },
-  {
-    appId: 'facebook',
-    appName: 'Facebook',
-    provider: 'meta',
-    connectionType: 'oauth',
-    appIcon: 'Facebook',
-    description: 'Manage Facebook Page posts, inspect feed comments, and query advertising insights.',
-    requiredPermissions: ['pages_read_engagement', 'pages_manage_posts'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'pageAccessToken', label: 'Page Access Token', type: 'password', required: true }
-    ]
-  },
-  {
-    appId: 'twitter',
-    appName: 'X/Twitter',
-    provider: 'twitter',
-    connectionType: 'oauth',
-    appIcon: 'Twitter',
-    description: 'Monitor mentions, search tweets, draft posts, and track follower analytics via Twitter API v2.',
-    requiredPermissions: ['tweet.read', 'tweet.write', 'users.read'],
-    requiresConfig: true,
-    configFields: [
-      { name: 'bearerToken', label: 'Twitter API v2 Bearer Token', type: 'password', required: true }
-    ]
-  },
-  {
-    appId: 'mongoose',
-    appName: 'MongoDB',
-    provider: 'mongodb',
-    connectionType: 'native',
-    appIcon: 'Database',
-    description: 'Direct MongoDB database inspector & query engine for notes, tool executions, and data schemas.',
-    requiredPermissions: ['read_schema', 'query_collections', 'write_documents'],
-    requiresConfig: false,
-    configFields: []
   },
   {
     appId: 'custom_rest',

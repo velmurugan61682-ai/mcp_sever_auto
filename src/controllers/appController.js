@@ -3,7 +3,9 @@ import {
   getConnectedUserApps,
   getSingleAppConnection,
   connectApp,
+  testAppConnection,
   disconnectApp,
+  disconnectAllApps,
   syncApp,
   getAppItems,
   getAppTools,
@@ -35,18 +37,26 @@ export const getAppById = asyncWrapper(async (req, res) => {
 });
 
 // @desc    Connect or Reconnect app connector
-// @route   POST /api/apps/:appId/connect, POST /api/apps/:appId/reconnect
+// @route   POST /api/apps/:appId/connect, POST /api/apps/:appId/reconnect, POST /api/apps/connect
 export const connectAppConnector = asyncWrapper(async (req, res) => {
-  const { appId } = req.params;
+  const appId = req.params.appId || req.body.appId || 'custom_rest';
   const configData = req.body || {};
 
   const connection = await connectApp(req.user._id, appId, configData);
 
   res.status(200).json({
     success: true,
-    message: `App '${appId}' connected successfully`,
+    message: `App '${connection.appName || appId}' connected successfully`,
     connection
   });
+});
+
+// @desc    Test connection for app connector
+// @route   POST /api/apps/:appId/test, POST /api/apps/test
+export const testAppConnector = asyncWrapper(async (req, res) => {
+  const appId = req.params.appId || 'preview';
+  const result = await testAppConnection(req.user._id, appId);
+  res.status(200).json({ success: true, message: result.message });
 });
 
 // @desc    Disconnect app connector
@@ -59,6 +69,17 @@ export const disconnectAppConnector = asyncWrapper(async (req, res) => {
     success: true,
     message: `App '${appId}' disconnected successfully`,
     connection
+  });
+});
+
+// @desc    Disconnect all app connectors
+// @route   DELETE /api/apps/disconnect-all
+export const disconnectAllAppsConnector = asyncWrapper(async (req, res) => {
+  await disconnectAllApps(req.user._id);
+
+  res.status(200).json({
+    success: true,
+    message: 'All apps disconnected successfully'
   });
 });
 

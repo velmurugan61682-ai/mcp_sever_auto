@@ -7,6 +7,9 @@ import { AuditLog } from '../models/AuditLog.js';
 import { processChatMessageWithDeepSeek } from '../services/deepseekService.js';
 import { asyncWrapper } from '../utils/asyncWrapper.js';
 
+const createLocalExternalId = (type, userId) =>
+  `local-${type}-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 // Initial seed conversations for genuine connected platforms only
 const SEED_CONVERSATIONS = [
   {
@@ -45,10 +48,35 @@ const SEED_CONVERSATIONS = [
     initialMessages: [
       { direction: 'incoming', senderExternalId: 'slack-team', content: 'Can you trigger the MongoDB tool execution for client accounts?' }
     ]
+  },
+  {
+    sourceApp: 'channelbot.in',
+    sourceAppIcon: 'Globe',
+    contactName: 'ChannelBot Lead #42',
+    contactAvatar: '',
+    lastMessage: 'New lead response received via ChannelBot REST API webhook.',
+    readOnly: false,
+    online: true,
+    initialMessages: [
+      { direction: 'incoming', senderExternalId: 'channelbot-lead', content: 'New lead response received via ChannelBot REST API webhook.' }
+    ]
+  },
+  {
+    sourceApp: 'YouTube',
+    sourceAppIcon: 'Video',
+    contactName: 'TechViewer (YouTube Comment)',
+    contactAvatar: '',
+    lastMessage: 'Awesome video! How do I connect ChannelBot API with YouTube auto comments?',
+    readOnly: false,
+    online: true,
+    initialMessages: [
+      { direction: 'incoming', senderExternalId: 'youtube-viewer', content: 'Hey! Loved the video demonstration on MCP AI!' },
+      { direction: 'incoming', senderExternalId: 'youtube-viewer', content: 'Awesome video! How do I connect ChannelBot API with YouTube auto comments?' }
+    ]
   }
 ];
 
-// Helper to seed initial conversations for user if empty
+// Helper to seed initial conversations for user if empty or missing platform threads
 const ensureUserConversationsSeeded = async (userId) => {
   // Clean up any existing MCP.ai Assistant items from conversation list
   await UnifiedConversation.deleteMany({
@@ -56,36 +84,36 @@ const ensureUserConversationsSeeded = async (userId) => {
     $or: [{ sourceApp: 'MCP.ai Assistant' }, { contactName: 'MCP.ai Assistant' }]
   });
 
-  const count = await UnifiedConversation.countDocuments({ user: userId });
-  if (count > 0) return;
-
   for (const seed of SEED_CONVERSATIONS) {
-    const conv = await UnifiedConversation.create({
-      workspaceId: 'default-workspace',
-      user: userId,
-      sourceApp: seed.sourceApp,
-      sourceAppIcon: seed.sourceAppIcon,
-      contactName: seed.contactName,
-      contactAvatar: seed.contactAvatar,
-      lastMessage: seed.lastMessage,
-      readOnly: seed.readOnly,
-      online: seed.online,
-      unreadCount: seed.sourceApp === 'WhatsApp' ? 1 : 0,
-      lastMessageAt: new Date()
-    });
-
-    for (const m of seed.initialMessages) {
-      await UnifiedMessage.create({
+    const existing = await UnifiedConversation.findOne({ user: userId, sourceApp: seed.sourceApp });
+    if (!existing) {
+      const conv = await UnifiedConversation.create({
         workspaceId: 'default-workspace',
-        conversationId: conv._id,
         user: userId,
         sourceApp: seed.sourceApp,
-        direction: m.direction,
-        senderExternalId: m.senderExternalId,
-        content: m.content,
-        sentAt: new Date(),
-        deliveryStatus: 'delivered'
+        sourceAppIcon: seed.sourceAppIcon,
+        contactName: seed.contactName,
+        contactAvatar: seed.contactAvatar,
+        lastMessage: seed.lastMessage,
+        readOnly: seed.readOnly,
+        online: seed.online,
+        unreadCount: seed.sourceApp === 'WhatsApp' || seed.sourceApp === 'channelbot.in' ? 1 : 0,
+        lastMessageAt: new Date()
       });
+
+      for (const m of seed.initialMessages) {
+        await UnifiedMessage.create({
+          workspaceId: 'default-workspace',
+          conversationId: conv._id,
+          user: userId,
+          sourceApp: seed.sourceApp,
+          direction: m.direction,
+          senderExternalId: m.senderExternalId,
+          content: m.content,
+          sentAt: new Date(),
+          deliveryStatus: 'delivered'
+        });
+      }
     }
   }
 };
@@ -113,6 +141,7 @@ export const createConversation = asyncWrapper(async (req, res) => {
     sourceApp: sourceApp || 'WhatsApp',
     sourceAppIcon: 'MessageCircle',
     contactName: contactName || title || 'New Contact',
+    externalConversationId: createLocalExternalId('conversation', req.user._id),
     lastMessage: 'Conversation started',
     lastMessageAt: new Date()
   });
@@ -206,6 +235,7 @@ export const sendMessage = asyncWrapper(async (req, res) => {
     sourceApp: conversation.sourceApp,
     direction: 'outgoing',
     content: content.trim(),
+    externalMessageId: createLocalExternalId('message', req.user._id),
     isAIReply: !!isAIReply,
     aiModel: aiModel || '',
     sentAt: new Date(),
@@ -282,7 +312,7 @@ export const generateAIReply = asyncWrapper(async (req, res) => {
 
 // POST /api/chat/regenerate
 export const regenerateMessage = asyncWrapper(async (req, res) => {
-  const { conversationId } = req.body;
+  const { conversationId, conversationMode } = req.body;
 
   if (!conversationId) {
     return res.status(400).json({ success: false, message: 'Conversation ID required' });
@@ -302,7 +332,11 @@ export const regenerateMessage = asyncWrapper(async (req, res) => {
   const assistantMessage = await processChatMessageWithDeepSeek({
     userId: req.user._id,
     conversationId: legacyConv._id,
-    userMessageText: lastUserMsg.content
+    userMessageText: lastUserMsg.content,
+    additionalSystemPrompt:
+      conversationMode === 'natural-voice'
+        ? 'This is a natural voice conversation. Reply in the same language, script, and natural language mix as the user. Keep most replies to one to three warm, conversational sentences. Never echo the user unless they explicitly ask you to repeat something. Ask one short clarification question when needed. Do not claim an MCP action succeeded until a real tool result confirms it.'
+        : ''
   });
 
   await UnifiedMessage.create({

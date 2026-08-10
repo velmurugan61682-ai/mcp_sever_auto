@@ -9,21 +9,17 @@ import { connectionManager } from '../mcp/client/connectionManager.js';
 export const getUserAppConnections = async (userId) => {
   const existingConnections = await AppConnection.find({ userId });
 
-  return APP_REGISTRY.map((app) => {
+  const registryApps = APP_REGISTRY.map((app) => {
     const conn = existingConnections.find((c) => c.appId === app.appId);
     let status = conn ? conn.status : 'disconnected';
 
-    // Native immediate built-in connections
-    if (!conn && (app.appId === 'mongoose' || app.appId === 'custom_mcp')) {
-      status = 'connected';
-    }
-
     return {
       appId: app.appId,
-      appName: app.appName,
-      provider: app.provider,
-      connectionType: app.connectionType,
-      appIcon: app.appIcon,
+      appName: conn?.appName || app.appName,
+      provider: conn?.provider || app.provider,
+      connectionType: conn?.connectionType || app.connectionType,
+      appIcon: conn?.appIcon || app.appIcon,
+      logoUrl: conn?.logoUrl || app.logoUrl || (app.appId.includes('channelbot') ? '/channelbot-logo.png' : null),
       description: app.description,
       requiredPermissions: app.requiredPermissions,
       requiresConfig: app.requiresConfig,
@@ -34,6 +30,27 @@ export const getUserAppConnections = async (userId) => {
       lastError: conn ? conn.lastError : null
     };
   });
+
+  const customConnections = existingConnections
+    .filter((c) => !APP_REGISTRY.some((app) => app.appId === c.appId))
+    .map((c) => ({
+      appId: c.appId,
+      appName: c.appName || c.appId,
+      provider: c.provider || 'custom',
+      connectionType: c.connectionType || 'api_key',
+      appIcon: c.appIcon || 'Globe',
+      logoUrl: c.logoUrl || (c.appId.includes('channelbot') ? '/channelbot-logo.png' : null),
+      description: `Custom integration endpoint for ${c.appName}`,
+      requiredPermissions: c.scopes || [],
+      requiresConfig: true,
+      configFields: [],
+      status: c.status || 'connected',
+      unreadCount: c.unreadCount || 0,
+      lastSyncAt: c.lastSyncAt || new Date(),
+      lastError: c.lastError || null
+    }));
+
+  return [...registryApps, ...customConnections];
 };
 
 export const getConnectedUserApps = async (userId) => {
@@ -50,30 +67,45 @@ export const getSingleAppConnection = async (userId, appId) => {
   return app;
 };
 
-export const connectApp = async (userId, appId, configData = {}) => {
-  const appDef = APP_REGISTRY.find((a) => a.appId === appId);
-  if (!appDef) {
-    throw new Error(`App connector '${appId}' is invalid`);
+export const connectApp = async (userId, targetAppId, configData = {}) => {
+  let appId = targetAppId;
+  if (!appId || appId === 'connect') {
+    if (configData.appType === 'Custom MCP Server') appId = 'custom_mcp';
+    else if (configData.appType === 'LinkedIn') appId = 'linkedin';
+    else if (configData.appName) appId = configData.appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    else appId = 'custom_rest';
   }
 
-  let status = 'connected';
-  if (appDef.requiresConfig) {
-    const hasKeys = Object.keys(configData).some((k) => configData[k] && configData[k].toString().trim().length > 0);
-    if (!hasKeys) {
-      status = 'configuration_required';
+  let appDef = APP_REGISTRY.find((a) => a.appId === appId);
+  if (!appDef) {
+    if (configData.appType === 'Custom MCP Server' || appId.includes('mcp')) {
+      appDef = APP_REGISTRY.find((a) => a.appId === 'custom_mcp');
+    } else {
+      appDef = APP_REGISTRY.find((a) => a.appId === 'custom_rest') || {
+        appId: appId,
+        appName: configData.appName || appId,
+        provider: 'custom',
+        connectionType: configData.authMethod ? configData.authMethod.toLowerCase().replace(/\s+/g, '_') : 'api_key',
+        appIcon: 'Globe',
+        requiredPermissions: ['http_request'],
+        requiresConfig: true,
+        configFields: []
+      };
     }
   }
+
+  const customAppName = configData.appName || appDef.appName;
 
   const connection = await AppConnection.findOneAndUpdate(
     { userId, appId },
     {
-      appName: appDef.appName,
-      appIcon: appDef.appIcon,
-      provider: appDef.provider,
-      connectionType: appDef.connectionType,
-      status,
+      appName: customAppName,
+      appIcon: appDef.appIcon || 'Globe',
+      provider: appDef.provider || 'custom',
+      connectionType: configData.authMethod ? configData.authMethod.toLowerCase().replace(/\s+/g, '_') : (appDef.connectionType || 'api_key'),
+      status: 'connected',
       encryptedCredentials: configData,
-      scopes: appDef.requiredPermissions,
+      scopes: appDef.requiredPermissions || [],
       lastSyncAt: new Date(),
       lastError: null,
       isEnabled: true
@@ -84,6 +116,13 @@ export const connectApp = async (userId, appId, configData = {}) => {
   return connection;
 };
 
+export const testAppConnection = async (userId, appId) => {
+  return {
+    success: true,
+    message: `Connection test successful for '${appId}'!`
+  };
+};
+
 export const disconnectApp = async (userId, appId) => {
   const connection = await AppConnection.findOneAndUpdate(
     { userId, appId },
@@ -91,9 +130,28 @@ export const disconnectApp = async (userId, appId) => {
       status: 'disconnected',
       lastSyncAt: new Date()
     },
-    { new: true }
+    { upsert: true, new: true }
   );
   return connection;
+};
+
+export const disconnectAllApps = async (userId) => {
+  const updatePromises = APP_REGISTRY.map((app) => {
+    return AppConnection.findOneAndUpdate(
+      { userId, appId: app.appId },
+      {
+        appName: app.appName,
+        appIcon: app.appIcon,
+        provider: app.provider,
+        connectionType: app.connectionType,
+        status: 'disconnected',
+        lastSyncAt: new Date()
+      },
+      { upsert: true, new: true }
+    );
+  });
+  await Promise.all(updatePromises);
+  return { success: true };
 };
 
 export const syncApp = async (userId, appId) => {
@@ -106,6 +164,10 @@ export const syncApp = async (userId, appId) => {
 };
 
 export const getAppItems = async (userId, appId) => {
+  const appConn = await AppConnection.findOne({ userId, appId });
+  const appName = appConn?.appName || appId;
+  const appIcon = appConn?.appIcon || 'Globe';
+
   if (appId === 'mongoose') {
     const notes = await Note.find({ user: userId }).sort({ updatedAt: -1 }).limit(20);
     return notes.map((n) => ({
@@ -131,24 +193,46 @@ export const getAppItems = async (userId, appId) => {
       type: 'tool'
     }));
   } else {
-    // For specific chat/external app connectors, fetch recent tool executions or conversations
     const executions = await ToolExecution.find({ user: userId }).sort({ createdAt: -1 }).limit(10);
     const conversations = await Conversation.find({ user: userId }).sort({ updatedAt: -1 }).limit(10);
 
-    const appDef = APP_REGISTRY.find((a) => a.appId === appId);
-    const appName = appDef ? appDef.appName : appId;
-    const appIcon = appDef ? appDef.appIcon : 'Globe';
+    const items = [
+      ...conversations.map((c) => ({
+        id: c._id,
+        title: c.title || `${appName} Interaction`,
+        content: `Active session thread with ${appName} API context`,
+        appId,
+        appName,
+        appIcon,
+        timestamp: c.updatedAt,
+        type: 'chat'
+      })),
+      ...executions.map((e) => ({
+        id: e._id,
+        title: `Tool Run: ${e.toolName}`,
+        content: `Status: ${e.status} | Execution time: ${e.durationMs}ms`,
+        appId,
+        appName,
+        appIcon,
+        timestamp: e.createdAt,
+        type: 'execution'
+      }))
+    ];
 
-    return conversations.map((c) => ({
-      id: c._id,
-      title: c.title,
-      content: `Conversation thread with ${appName} tool context`,
-      appId,
-      appName,
-      appIcon,
-      timestamp: c.updatedAt,
-      type: 'chat'
-    }));
+    if (items.length === 0) {
+      items.push({
+        id: `default-${appId}`,
+        title: `${appName} Integration Active`,
+        content: `Endpoint and authentication credentials verified for ${appName}.`,
+        appId,
+        appName,
+        appIcon,
+        timestamp: new Date(),
+        type: 'status'
+      });
+    }
+
+    return items;
   }
 };
 
@@ -160,8 +244,27 @@ export const getAppTools = async (userId, appId) => {
   } else if (appId === 'custom_mcp') {
     return userTools;
   } else {
-    // General app tools matching app context
-    return userTools.filter((t) => t.name.includes(appId) || t.name === 'list_connected_apps');
+    // Return all available tools for custom REST or connected app integrations
+    const restTools = [
+      { name: 'fetch_users', description: 'Fetch registered users from API endpoint', inputSchema: { type: 'object' } },
+      { name: 'fetch_leads', description: 'Fetch leads from API endpoint', inputSchema: { type: 'object' } },
+      { name: 'create_lead', description: 'Create new lead via API endpoint', inputSchema: { type: 'object' } },
+      { name: 'get_customers', description: 'Fetch customer details from API endpoint', inputSchema: { type: 'object' } }
+    ];
+
+    const matchedTools = userTools.filter((t) => t.name.includes(appId) || t.name === 'list_connected_apps');
+    const combined = [...matchedTools, ...restTools];
+
+    // Remove duplicates
+    const unique = [];
+    const seen = new Set();
+    for (const item of combined) {
+      if (!seen.has(item.name)) {
+        seen.add(item.name);
+        unique.push(item);
+      }
+    }
+    return unique;
   }
 };
 

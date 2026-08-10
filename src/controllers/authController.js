@@ -108,3 +108,41 @@ export const updateSettings = asyncWrapper(async (req, res) => {
     settings: user.settings
   });
 });
+
+// @desc    Google OAuth / quick auth
+// @route   POST /api/auth/google
+export const googleUser = asyncWrapper(async (req, res) => {
+  const { email, name } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Google email address is required' });
+  }
+
+  let user = await User.findOne({ email: email.toLowerCase().trim() });
+
+  if (!user) {
+    const randomPassword = 'google_pwd_' + Math.random().toString(36).slice(-10) + '!A1';
+    const userName = name || email.split('@')[0] || 'Google User';
+    user = await User.create({
+      name: userName,
+      email: email.toLowerCase().trim(),
+      password: randomPassword,
+      role: 'user'
+    });
+  }
+
+  const token = generateToken(user._id);
+
+  res.status(200).json({
+    success: true,
+    token,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      settings: user.settings
+    }
+  });
+});
+

@@ -38,7 +38,8 @@ export const processChatMessageWithDeepSeek = async ({
   userId,
   conversationId,
   userMessageText,
-  socket = null
+  socket = null,
+  additionalSystemPrompt = ''
 }) => {
   const emitProgress = (event, data) => {
     if (socket) {
@@ -72,7 +73,10 @@ export const processChatMessageWithDeepSeek = async ({
   const formattedMessages = [
     {
       role: 'system',
-      content: conversation.systemPrompt || 'You are mcp.ai, an intelligent assistant powered by DeepSeek and Model Context Protocol. You have access to real-time tools to get time, calculate math, search & create notes, and audit connected apps.'
+      content: [
+        conversation.systemPrompt || 'You are mcp.ai, an intelligent assistant powered by DeepSeek and Model Context Protocol. You have access to real-time tools to get time, calculate math, search & create notes, and audit connected apps.',
+        additionalSystemPrompt
+      ].filter(Boolean).join('\n\n')
     },
     ...historyMessages.map((m) => {
       if (m.role === 'tool') {
@@ -108,7 +112,9 @@ export const processChatMessageWithDeepSeek = async ({
     // Simple heuristic tool selection if user prompt implies tool usage
     const lowerPrompt = userMessageText.toLowerCase();
 
-    if (lowerPrompt.includes('crm') || lowerPrompt.includes('lead')) {
+    if (additionalSystemPrompt) {
+      assistantContent = 'Natural conversation is temporarily unavailable because the configured AI provider is not connected. Please try again after the provider is configured.';
+    } else if (lowerPrompt.includes('crm') || lowerPrompt.includes('lead')) {
       emitProgress('chat_status', { status: 'tool_execution', message: 'Executing tool: create_crm_lead' });
       const toolRes = await safeExecuteTool({
         userId,

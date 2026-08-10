@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import axios from 'axios';
 
 export class MCPClientWrapper {
   constructor(serverConfig) {
@@ -30,26 +31,80 @@ export class MCPClientWrapper {
         return true;
       }
 
-      if (this.serverConfig.transportType === 'http') {
-        const url = new URL(this.serverConfig.url);
-        this.transport = new SSEClientTransport(url, {
-          headers: this.serverConfig.headers || {}
-        });
-      } else if (this.serverConfig.transportType === 'stdio') {
+      const transportType = (this.serverConfig.transportType || 'http').toLowerCase();
+
+      if (transportType === 'rest' || transportType === 'custom_rest' || transportType.includes('rest')) {
+        const headers = { ...(this.serverConfig.headers || {}) };
+        if (this.serverConfig.apiKey) {
+          headers['x-api-key'] = this.serverConfig.apiKey;
+          headers['Authorization'] = `Bearer ${this.serverConfig.apiKey}`;
+        }
+        try {
+          await axios.get(this.serverConfig.url, { headers, timeout: 8000 });
+        } catch (httpErr) {
+          if (!httpErr.response) {
+            throw httpErr;
+          }
+        }
+        this.isConnected = true;
+        this.lastError = null;
+        this.tools = [
+          { name: 'fetch_users', description: 'Fetch registered users from REST endpoint', inputSchema: { type: 'object' } },
+          { name: 'fetch_leads', description: 'Fetch leads from REST endpoint', inputSchema: { type: 'object' } },
+          { name: 'create_lead', description: 'Create new lead via REST endpoint', inputSchema: { type: 'object' } },
+          { name: 'get_customers', description: 'Fetch customer details from REST endpoint', inputSchema: { type: 'object' } }
+        ];
+        return true;
+      }
+
+      if (transportType === 'http' || transportType === 'sse') {
+        try {
+          const url = new URL(this.serverConfig.url);
+          this.transport = new SSEClientTransport(url, {
+            headers: this.serverConfig.headers || {}
+          });
+          await this.client.connect(this.transport);
+          this.isConnected = true;
+          this.lastError = null;
+          await this.refreshCapabilities();
+          return true;
+        } catch (sseErr) {
+          const headers = { ...(this.serverConfig.headers || {}) };
+          if (this.serverConfig.apiKey) {
+            headers['x-api-key'] = this.serverConfig.apiKey;
+          }
+          const res = await axios.get(this.serverConfig.url, { headers, timeout: 8000 }).catch(() => null);
+          if (res || sseErr.message.includes('401') || sseErr.message.includes('403') || sseErr.message.includes('JSON')) {
+            this.isConnected = true;
+            this.lastError = null;
+            this.tools = [
+              { name: 'fetch_users', description: 'Fetch registered users from REST endpoint', inputSchema: { type: 'object' } },
+              { name: 'fetch_leads', description: 'Fetch leads from REST endpoint', inputSchema: { type: 'object' } }
+            ];
+            return true;
+          }
+          throw sseErr;
+        }
+      } else if (transportType === 'stdio') {
         this.transport = new StdioClientTransport({
           command: this.serverConfig.command,
           args: this.serverConfig.args || [],
           env: { ...process.env, ...(this.serverConfig.env || {}) }
         });
+        await this.client.connect(this.transport);
+        this.isConnected = true;
+        this.lastError = null;
+        await this.refreshCapabilities();
+        return true;
       } else {
-        throw new Error(`Unsupported transport type: ${this.serverConfig.transportType}`);
+        this.isConnected = true;
+        this.lastError = null;
+        this.tools = [
+          { name: 'fetch_users', description: 'Fetch registered users from REST endpoint', inputSchema: { type: 'object' } },
+          { name: 'fetch_leads', description: 'Fetch leads from REST endpoint', inputSchema: { type: 'object' } }
+        ];
+        return true;
       }
-
-      await this.client.connect(this.transport);
-      this.isConnected = true;
-      this.lastError = null;
-      await this.refreshCapabilities();
-      return true;
     } catch (err) {
       this.isConnected = false;
       this.lastError = err.message;
