@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test:mcp": "node src/mcp/testMcp.js"
+    "test:mcp": "node src/mcp/testMcp.js",
+    "reset:integrations": "node src/resetScript.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.0",

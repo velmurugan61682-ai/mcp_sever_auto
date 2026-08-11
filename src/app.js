@@ -44,8 +44,26 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-import { getUnifiedInboxController } from './controllers/appController.js';
+import {
+  getUnifiedInboxController,
+  handleIncomingAppWebhook,
+  markInboxConversationAsReadController,
+  triggerInboxAutoSyncController,
+  getInboxConversationMessagesController,
+  disconnectAllAppsConnector
+} from './controllers/appController.js';
 import { protect } from './middleware/authMiddleware.js';
+
+import whatsappWebhookRoutes from './routes/whatsappWebhookRoutes.js';
+
+// Webhook listener endpoints (public & authenticated)
+app.post('/api/webhooks/incoming', handleIncomingAppWebhook);
+app.post('/api/apps/webhook', handleIncomingAppWebhook);
+app.post('/api/apps/:appId/webhook', handleIncomingAppWebhook);
+
+// Mount Meta WhatsApp Webhook endpoints
+app.use('/webhook/whatsapp', whatsappWebhookRoutes);
+app.use('/api/webhooks/whatsapp', whatsappWebhookRoutes);
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
@@ -59,6 +77,10 @@ app.use('/api/crm', crmRoutes);
 app.use('/api/automations', automationRoutes);
 app.use('/api/audit', auditRoutes);
 app.get('/api/unified-inbox', protect, getUnifiedInboxController);
+app.get('/api/inbox/conversations/:conversationId/messages', protect, getInboxConversationMessagesController);
+app.patch('/api/inbox/conversations/:id/read', protect, markInboxConversationAsReadController);
+app.post('/api/inbox/sync', protect, triggerInboxAutoSyncController);
+app.post('/api/dev/reset-integrations', protect, disconnectAllAppsConnector);
 
 // Streamable HTTP / SSE endpoint for Built-in MCP Server
 const builtinServer = createBuiltinMCPServer();

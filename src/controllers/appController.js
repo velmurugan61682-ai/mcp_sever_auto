@@ -72,14 +72,15 @@ export const disconnectAppConnector = asyncWrapper(async (req, res) => {
   });
 });
 
-// @desc    Disconnect all app connectors
-// @route   DELETE /api/apps/disconnect-all
+// @desc    Disconnect all app connectors and reset integration data
+// @route   DELETE /api/apps/disconnect-all, POST /api/dev/reset-integrations
 export const disconnectAllAppsConnector = asyncWrapper(async (req, res) => {
-  await disconnectAllApps(req.user._id);
+  const summary = await disconnectAllApps(req.user._id);
 
   res.status(200).json({
     success: true,
-    message: 'All apps disconnected successfully'
+    message: 'All apps disconnected and user integration test data reset successfully.',
+    ...summary
   });
 });
 
@@ -132,4 +133,97 @@ export const callAppToolController = asyncWrapper(async (req, res) => {
 export const getUnifiedInboxController = asyncWrapper(async (req, res) => {
   const items = await getUnifiedInbox(req.user._id);
   res.status(200).json({ success: true, count: items.length, items });
+});
+
+import { processIncomingInboxEvent, markConversationAsRead, syncConnectedUserAppsBackground } from '../services/inboxSyncService.js';
+
+// @desc    Handle incoming webhook for connected platforms (WhatsApp, YouTube, ChannelBot, Slack, Gmail, GitHub, Custom MCP)
+// @route   POST /api/apps/webhook, POST /api/apps/:appId/webhook
+export const handleIncomingAppWebhook = asyncWrapper(async (req, res) => {
+  const platform = req.params.appId || req.body.platform || req.body.appId || 'custom_mcp';
+  const userId = req.user?._id || req.body.userId || req.query.userId;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, message: 'User ID context required for webhook processing' });
+  }
+
+  const {
+    eventId,
+    platformEventId,
+    threadId,
+    platformThreadId,
+    type,
+    sender,
+    title,
+    content,
+    message,
+    commentText,
+    timestamp,
+    priority
+  } = req.body || {};
+
+  const resultMessage = await processIncomingInboxEvent({
+    userId,
+    connectionId: platform,
+    platform,
+    platformEventId: eventId || platformEventId || `evt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    platformThreadId: threadId || platformThreadId || sender?.id || 'default-thread',
+    type: type || 'message',
+    sender: sender || { name: title || `${platform.toUpperCase()} Contact`, id: 'external' },
+    title: title || sender?.name || `${platform.toUpperCase()} User`,
+    content: content || message || commentText || 'New incoming event received',
+    timestamp: timestamp ? new Date(timestamp) : new Date(),
+    priority: priority || 'normal'
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Event for ${platform} processed and synchronized to Unified Inbox`,
+    data: resultMessage
+  });
+});
+
+// @desc    Mark conversation as read and update badges
+// @route   PATCH /api/inbox/conversations/:id/read
+export const markInboxConversationAsReadController = asyncWrapper(async (req, res) => {
+  const conversationId = req.params.id;
+  const conversation = await markConversationAsRead(req.user._id, conversationId);
+  res.status(200).json({ success: true, conversation });
+});
+
+// @desc    Trigger background auto-sync for connected apps
+// @route   POST /api/inbox/sync
+export const triggerInboxAutoSyncController = asyncWrapper(async (req, res) => {
+  await syncConnectedUserAppsBackground(req.user._id);
+  res.status(200).json({ success: true, message: 'Background inbox sync completed' });
+});
+
+import { UnifiedMessage } from '../models/UnifiedMessage.js';
+
+// @desc    Get REAL stored messages for a specific conversation ordered oldest -> newest
+// @route   GET /api/inbox/conversations/:conversationId/messages
+export const getInboxConversationMessagesController = asyncWrapper(async (req, res) => {
+  const { conversationId } = req.params;
+  const messages = await UnifiedMessage.find({
+    user: req.user._id,
+    conversationId
+  }).sort({ sentAt: 1, createdAt: 1 });
+
+  const formatted = messages.map((m) => ({
+    _id: m._id,
+    platformMessageId: m.externalMessageId || m._id.toString(),
+    conversationId: m.conversationId,
+    senderId: m.senderExternalId || 'external',
+    senderName: m.direction === 'outgoing' ? 'You' : 'Contact',
+    direction: m.direction,
+    content: m.content,
+    timestamp: m.sentAt || m.createdAt,
+    platform: m.sourceApp
+  }));
+
+  res.status(200).json({
+    success: true,
+    count: formatted.length,
+    messages: formatted
+  });
 });

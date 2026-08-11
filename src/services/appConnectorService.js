@@ -4,7 +4,16 @@ import { APP_REGISTRY } from '../mcp/registry/appRegistry.js';
 import { Note } from '../models/Note.js';
 import { Conversation } from '../models/Conversation.js';
 import { ToolExecution } from '../models/ToolExecution.js';
+import { UnifiedConversation } from '../models/UnifiedConversation.js';
+import { UnifiedMessage } from '../models/UnifiedMessage.js';
+import { InboxSyncState } from '../models/InboxSyncState.js';
+import { MCPServer } from '../models/MCPServer.js';
 import { connectionManager } from '../mcp/client/connectionManager.js';
+import { executeFetchChannelbotComments } from '../mcp/server/tools/channelbotTool.js';
+import { processIncomingInboxEvent } from './inboxSyncService.js';
+import { executeFetchGmailMessages } from '../mcp/server/tools/gmailTool.js';
+import { executeFetchSlackMessages } from '../mcp/server/tools/slackTool.js';
+import { executeFetchGithubNotifications } from '../mcp/server/tools/githubTool.js';
 
 export const getUserAppConnections = async (userId) => {
   const existingConnections = await AppConnection.find({ userId });
@@ -60,63 +69,199 @@ export const getConnectedUserApps = async (userId) => {
 
 export const getSingleAppConnection = async (userId, appId) => {
   const allApps = await getUserAppConnections(userId);
-  const app = allApps.find((a) => a.appId === appId);
-  if (!app) {
-    throw new Error(`App '${appId}' is not recognized.`);
+  const found = allApps.find((a) => a.appId === appId);
+
+  if (found) return found;
+
+  const registryDef = APP_REGISTRY.find((a) => a.appId === appId);
+  if (registryDef) {
+    return {
+      ...registryDef,
+      status: 'disconnected',
+      unreadCount: 0,
+      lastSyncAt: null,
+      lastError: null
+    };
   }
-  return app;
+
+  throw new Error(`App connector '${appId}' not found`);
 };
 
-export const connectApp = async (userId, targetAppId, configData = {}) => {
-  let appId = targetAppId;
-  if (!appId || appId === 'connect') {
-    if (configData.appType === 'Custom MCP Server') appId = 'custom_mcp';
-    else if (configData.appType === 'LinkedIn') appId = 'linkedin';
-    else if (configData.appName) appId = configData.appName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    else appId = 'custom_rest';
-  }
+import crypto from 'crypto';
+import { executeFetchWhatsappMessages } from '../mcp/server/tools/whatsappTool.js';
 
-  let appDef = APP_REGISTRY.find((a) => a.appId === appId);
-  if (!appDef) {
-    if (configData.appType === 'Custom MCP Server' || appId.includes('mcp')) {
-      appDef = APP_REGISTRY.find((a) => a.appId === 'custom_mcp');
-    } else {
-      appDef = APP_REGISTRY.find((a) => a.appId === 'custom_rest') || {
-        appId: appId,
-        appName: configData.appName || appId,
-        provider: 'custom',
-        connectionType: configData.authMethod ? configData.authMethod.toLowerCase().replace(/\s+/g, '_') : 'api_key',
-        appIcon: 'Globe',
-        requiredPermissions: ['http_request'],
-        requiresConfig: true,
-        configFields: []
-      };
+const ALGORITHM = 'aes-256-cbc';
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(process.env.JWT_SECRET || 'mcp_ai_secret_key_2026').digest();
+
+export const encryptToken = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  if (text.startsWith('enc:')) return text;
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return `enc:${iv.toString('hex')}:${encrypted}`;
+};
+
+export const decryptToken = (text) => {
+  if (!text || typeof text !== 'string' || !text.startsWith('enc:')) return text;
+  try {
+    const parts = text.split(':');
+    const iv = Buffer.from(parts[1], 'hex');
+    const encryptedText = parts[2];
+    const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    return text;
+  }
+};
+
+export const connectApp = async (userId, appId, configData = {}) => {
+  const registryDef = APP_REGISTRY.find((a) => a.appId === appId);
+  const appName = configData.appName || registryDef?.appName || appId;
+  const provider = registryDef?.provider || 'custom';
+  const connectionType = registryDef?.connectionType || configData.authMethod || 'api_key';
+
+  // 1. Encrypt sensitive tokens and credentials before saving
+  const sanitizedCredentials = { ...configData };
+  Object.keys(sanitizedCredentials).forEach((key) => {
+    const lower = key.toLowerCase();
+    if (lower.includes('token') || lower.includes('secret') || lower.includes('key')) {
+      if (typeof sanitizedCredentials[key] === 'string' && sanitizedCredentials[key]) {
+        sanitizedCredentials[key] = encryptToken(sanitizedCredentials[key]);
+      }
     }
-  }
+  });
 
-  const customAppName = configData.appName || appDef.appName;
-
+  // 2. Set status to 'connected' and update lastSyncAt
   const connection = await AppConnection.findOneAndUpdate(
     { userId, appId },
     {
-      appName: customAppName,
-      appIcon: appDef.appIcon || 'Globe',
-      provider: appDef.provider || 'custom',
-      connectionType: configData.authMethod ? configData.authMethod.toLowerCase().replace(/\s+/g, '_') : (appDef.connectionType || 'api_key'),
+      appName,
+      provider,
+      connectionType,
+      appIcon: registryDef?.appIcon || 'Globe',
+      logoUrl: registryDef?.logoUrl || (appId.includes('channelbot') ? '/channelbot-logo.png' : null),
+      credentials: sanitizedCredentials,
       status: 'connected',
-      encryptedCredentials: configData,
-      scopes: appDef.requiredPermissions || [],
       lastSyncAt: new Date(),
-      lastError: null,
-      isEnabled: true
+      lastError: null
     },
     { upsert: true, new: true }
   );
+
+  // 3. Immediately trigger platform message fetch to backfill existing conversations
+  if (appId === 'whatsapp') {
+    try {
+      const fetchRes = await executeFetchWhatsappMessages({ limit: 10 }, { userId });
+      if (fetchRes && fetchRes.success && Array.isArray(fetchRes.messages)) {
+        for (const msg of fetchRes.messages) {
+          await processIncomingInboxEvent({
+            userId,
+            connectionId: 'whatsapp',
+            platform: 'whatsapp',
+            platformEventId: msg.messageId || `wamid.${Date.now()}`,
+            platformThreadId: msg.senderPhone || msg.senderName || 'whatsapp-thread',
+            type: 'message',
+            sender: {
+              id: msg.senderPhone || 'external',
+              name: msg.senderName || 'WhatsApp User',
+              isMe: false
+            },
+            title: msg.senderName || 'WhatsApp Contact',
+            content: msg.messageText || msg.content || 'WhatsApp Message',
+            timestamp: msg.publishedAt ? new Date() : new Date(),
+            priority: msg.status === 'old' ? 'low' : 'normal'
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[connectApp] WhatsApp immediate backfill warning:', err.message);
+    }
+  } else if (appId === 'gmail') {
+    try {
+      const fetchRes = await executeFetchGmailMessages({ limit: 10 }, { userId });
+      if (fetchRes && fetchRes.success && Array.isArray(fetchRes.messages)) {
+        for (const msg of fetchRes.messages) {
+          await processIncomingInboxEvent({
+            userId,
+            connectionId: 'gmail',
+            platform: 'gmail',
+            platformEventId: msg.messageId,
+            platformThreadId: msg.senderEmail,
+            type: 'email',
+            sender: { id: msg.senderEmail, name: msg.senderName, isMe: false },
+            title: msg.senderName,
+            content: `${msg.subject}: ${msg.content}`,
+            timestamp: new Date()
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[connectApp] Gmail immediate backfill warning:', err.message);
+    }
+  } else if (appId === 'slack') {
+    try {
+      const fetchRes = await executeFetchSlackMessages({ limit: 10 }, { userId });
+      if (fetchRes && fetchRes.success && Array.isArray(fetchRes.messages)) {
+        for (const msg of fetchRes.messages) {
+          await processIncomingInboxEvent({
+            userId,
+            connectionId: 'slack',
+            platform: 'slack',
+            platformEventId: msg.messageId,
+            platformThreadId: msg.channel,
+            type: 'chat',
+            sender: { id: msg.senderName, name: msg.senderName, isMe: false },
+            title: `${msg.senderName} (${msg.channel})`,
+            content: msg.content,
+            timestamp: new Date()
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[connectApp] Slack immediate backfill warning:', err.message);
+    }
+  } else if (appId === 'github') {
+    try {
+      const fetchRes = await executeFetchGithubNotifications({ limit: 10 }, { userId });
+      if (fetchRes && fetchRes.success && Array.isArray(fetchRes.notifications)) {
+        for (const notif of fetchRes.notifications) {
+          await processIncomingInboxEvent({
+            userId,
+            connectionId: 'github',
+            platform: 'github',
+            platformEventId: notif.messageId,
+            platformThreadId: notif.repo,
+            type: 'notification',
+            sender: { id: notif.senderName, name: notif.senderName, isMe: false },
+            title: `${notif.senderName} (${notif.repo})`,
+            content: notif.content,
+            timestamp: new Date()
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[connectApp] GitHub immediate backfill warning:', err.message);
+    }
+  }
 
   return connection;
 };
 
 export const testAppConnection = async (userId, appId) => {
+  const connection = await AppConnection.findOne({ userId, appId });
+  if (!connection) {
+    throw new Error(`No active connection config found for app '${appId}'`);
+  }
+
+  await AppConnection.findByIdAndUpdate(connection._id, {
+    lastSyncAt: new Date(),
+    lastError: null
+  });
+
   return {
     success: true,
     message: `Connection test successful for '${appId}'!`
@@ -136,22 +281,30 @@ export const disconnectApp = async (userId, appId) => {
 };
 
 export const disconnectAllApps = async (userId) => {
-  const updatePromises = APP_REGISTRY.map((app) => {
-    return AppConnection.findOneAndUpdate(
-      { userId, appId: app.appId },
-      {
-        appName: app.appName,
-        appIcon: app.appIcon,
-        provider: app.provider,
-        connectionType: app.connectionType,
-        status: 'disconnected',
-        lastSyncAt: new Date()
-      },
-      { upsert: true, new: true }
-    );
-  });
-  await Promise.all(updatePromises);
-  return { success: true };
+  // 1. Delete all connected app / integration records for user
+  const connResult = await AppConnection.deleteMany({ userId });
+
+  // 2. Delete custom user-created MCP server instances (preserve built-in server)
+  const mcpResult = await MCPServer.deleteMany({ userId, isBuiltin: { $ne: true } });
+
+  // 3. Delete UnifiedInbox conversations and messages for user
+  const convResult = await UnifiedConversation.deleteMany({ user: userId });
+  const msgResult = await UnifiedMessage.deleteMany({ user: userId });
+
+  // 4. Delete sync state cursors & watermarks
+  const syncResult = await InboxSyncState.deleteMany({ user: userId });
+
+  // 5. Delete developer tool execution logs
+  const toolResult = await ToolExecution.deleteMany({ user: userId });
+
+  return {
+    success: true,
+    connectionsRemoved: (connResult.deletedCount || 0) + (mcpResult.deletedCount || 0),
+    messagesRemoved: msgResult.deletedCount || 0,
+    conversationsRemoved: convResult.deletedCount || 0,
+    syncStatesRemoved: syncResult.deletedCount || 0,
+    toolExecutionsRemoved: toolResult.deletedCount || 0
+  };
 };
 
 export const syncApp = async (userId, appId) => {
@@ -219,19 +372,6 @@ export const getAppItems = async (userId, appId) => {
       }))
     ];
 
-    if (items.length === 0) {
-      items.push({
-        id: `default-${appId}`,
-        title: `${appName} Integration Active`,
-        content: `Endpoint and authentication credentials verified for ${appName}.`,
-        appId,
-        appName,
-        appIcon,
-        timestamp: new Date(),
-        type: 'status'
-      });
-    }
-
     return items;
   }
 };
@@ -243,8 +383,9 @@ export const getAppTools = async (userId, appId) => {
     return userTools.filter((t) => t.name === 'search_saved_notes' || t.name === 'create_note');
   } else if (appId === 'custom_mcp') {
     return userTools;
+  } else if (appId.includes('channelbot')) {
+    return userTools.filter((t) => t.name.includes('channelbot') || t.name === 'list_connected_apps');
   } else {
-    // Return all available tools for custom REST or connected app integrations
     const restTools = [
       { name: 'fetch_users', description: 'Fetch registered users from API endpoint', inputSchema: { type: 'object' } },
       { name: 'fetch_leads', description: 'Fetch leads from API endpoint', inputSchema: { type: 'object' } },
@@ -255,7 +396,6 @@ export const getAppTools = async (userId, appId) => {
     const matchedTools = userTools.filter((t) => t.name.includes(appId) || t.name === 'list_connected_apps');
     const combined = [...matchedTools, ...restTools];
 
-    // Remove duplicates
     const unique = [];
     const seen = new Set();
     for (const item of combined) {
@@ -269,43 +409,37 @@ export const getAppTools = async (userId, appId) => {
 };
 
 export const getUnifiedInbox = async (userId) => {
-  const conversations = await Conversation.find({ user: userId }).sort({ updatedAt: -1 }).limit(15);
-  const notes = await Note.find({ user: userId }).sort({ updatedAt: -1 }).limit(10);
-  const toolExecs = await ToolExecution.find({ user: userId }).sort({ createdAt: -1 }).limit(10);
+  const connectedApps = await AppConnection.find({ userId, status: 'connected' });
+  if (!connectedApps || connectedApps.length === 0) {
+    return [];
+  }
 
-  const items = [
-    ...conversations.map((c) => ({
-      id: c._id,
-      title: c.title,
-      content: 'AI Assistant Session',
-      appId: 'custom_mcp',
-      appName: 'AI Assistant',
-      appIcon: 'MessageSquare',
-      timestamp: c.updatedAt,
-      type: 'conversation'
-    })),
-    ...notes.map((n) => ({
-      id: n._id,
-      title: n.title,
-      content: n.content,
-      appId: 'mongoose',
-      appName: 'MongoDB',
-      appIcon: 'Database',
-      timestamp: n.updatedAt,
-      type: 'note'
-    })),
-    ...toolExecs.map((t) => ({
-      id: t._id,
-      title: `Tool Execution: ${t.toolName}`,
-      content: `Result status: ${t.status} (${t.durationMs}ms)`,
-      appId: 'custom_mcp',
-      appName: t.serverName || 'MCP Server',
-      appIcon: 'Cpu',
-      timestamp: t.createdAt,
-      type: 'execution'
-    }))
-  ];
+  const unifiedConvs = await UnifiedConversation.find({
+    user: userId,
+    status: { $ne: 'closed' }
+  }).sort({ lastMessageAt: -1, updatedAt: -1 });
 
-  items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  return items;
+  const items = unifiedConvs.map((c) => ({
+    id: c._id.toString(),
+    title: c.contactName,
+    content: c.lastMessage || 'No messages yet',
+    appId: c.sourceApp,
+    appName: c.sourceApp,
+    appIcon: c.sourceAppIcon || 'MessageSquare',
+    logoUrl: c.contactAvatar,
+    timestamp: c.lastMessageAt || c.updatedAt,
+    unreadCount: c.unreadCount || 0,
+    priority: c.status === 'archived' ? 'low' : 'high',
+    archived: c.status === 'archived',
+    type: 'communication'
+  }));
+
+  return items.filter(
+    (item) =>
+      item.title &&
+      !item.title.startsWith('Tool Execution:') &&
+      !item.title.includes('fetch_') &&
+      item.appName !== 'Built-in MCP Server' &&
+      item.type !== 'execution'
+  );
 };

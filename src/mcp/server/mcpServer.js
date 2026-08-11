@@ -5,6 +5,18 @@ import { calculatorToolDefinition, executeCalculator } from './tools/calculatorT
 import { searchNotesToolDefinition, createNoteToolDefinition, executeSearchNotes, executeCreateNote } from './tools/notesTool.js';
 import { listConnectedAppsToolDefinition, executeListConnectedApps } from './tools/appsTool.js';
 import { createCrmLeadToolDefinition, executeCreateCrmLead } from './tools/crmTool.js';
+import {
+  fetchChannelbotCommentsToolDefinition,
+  replyChannelbotCommentToolDefinition,
+  executeFetchChannelbotComments,
+  executeReplyChannelbotComment
+} from './tools/channelbotTool.js';
+import {
+  sendWhatsappMessageToolDefinition,
+  fetchWhatsappMessagesToolDefinition,
+  executeSendWhatsappMessage,
+  executeFetchWhatsappMessages
+} from './tools/whatsappTool.js';
 
 export const BUILTIN_TOOLS = [
   getTimeToolDefinition,
@@ -12,7 +24,11 @@ export const BUILTIN_TOOLS = [
   searchNotesToolDefinition,
   createNoteToolDefinition,
   listConnectedAppsToolDefinition,
-  createCrmLeadToolDefinition
+  createCrmLeadToolDefinition,
+  fetchChannelbotCommentsToolDefinition,
+  replyChannelbotCommentToolDefinition,
+  sendWhatsappMessageToolDefinition,
+  fetchWhatsappMessagesToolDefinition
 ];
 
 export const BUILTIN_RESOURCES = [
@@ -123,6 +139,18 @@ export const createBuiltinMCPServer = () => {
         case 'create_crm_lead':
           result = await executeCreateCrmLead(args, userId);
           break;
+        case 'fetch_channelbot_comments':
+          result = await executeFetchChannelbotComments(args);
+          break;
+        case 'reply_channelbot_comment':
+          result = await executeReplyChannelbotComment(args);
+          break;
+        case 'sendWhatsappMessage':
+          result = await executeSendWhatsappMessage(args, { userId });
+          break;
+        case 'fetchWhatsappMessages':
+          result = await executeFetchWhatsappMessages(args, { userId });
+          break;
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -166,6 +194,14 @@ export const executeBuiltinToolDirect = async (toolName, args, userId) => {
       return await executeListConnectedApps(args, userId);
     case 'create_crm_lead':
       return await executeCreateCrmLead(args, userId);
+    case 'fetch_channelbot_comments':
+      return await executeFetchChannelbotComments(args);
+    case 'reply_channelbot_comment':
+      return await executeReplyChannelbotComment(args);
+    case 'sendWhatsappMessage':
+      return await executeSendWhatsappMessage(args, { userId });
+    case 'fetchWhatsappMessages':
+      return await executeFetchWhatsappMessages(args, { userId });
     default:
       throw new Error(`Direct tool execution error: Unknown tool '${toolName}'`);
   }

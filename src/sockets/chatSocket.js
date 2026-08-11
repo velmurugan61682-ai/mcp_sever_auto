@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env.js';
 import { processChatMessageWithDeepSeek } from '../services/deepseekService.js';
+import { setSocketIOInstance } from '../services/inboxSyncService.js';
 
 export const setupSocketIO = (io) => {
+  setSocketIOInstance(io);
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) {
@@ -21,6 +23,7 @@ export const setupSocketIO = (io) => {
   io.on('connection', (socket) => {
     console.log(`[Socket Connected] User ${socket.userId} (Socket ID: ${socket.id})`);
 
+    socket.join(socket.userId.toString());
     socket.join(`user:${socket.userId}`);
 
     socket.on('join_conversation', (conversationId) => {

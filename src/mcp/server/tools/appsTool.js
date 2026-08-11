@@ -32,11 +32,6 @@ export const executeListConnectedApps = async (args, contextUserId) => {
   }
 
   const defaultAppsList = [
-    { appId: 'gmail', appName: 'Gmail', description: 'Read email threads, draft replies, and search inbox' },
-    { appId: 'slack', appName: 'Slack', description: 'Interact with channels and send messages' },
-    { appId: 'github', appName: 'GitHub', description: 'Inspect repositories, issues, and pull requests' },
-    { appId: 'linkedin', appName: 'LinkedIn', description: 'Professional networking integration' },
-    { appId: 'whatsapp', appName: 'WhatsApp', description: 'Automate WhatsApp conversations' },
     { appId: 'custom_rest', appName: 'Custom REST API', description: 'Generic REST API Endpoints Connector' },
     { appId: 'custom_mcp', appName: 'Custom MCP Server', description: 'Built-in & Remote MCP Tools Connector' }
   ];

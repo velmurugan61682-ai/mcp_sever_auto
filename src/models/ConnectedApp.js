@@ -38,6 +38,10 @@ const connectedAppSchema = new mongoose.Schema(
       enum: ['connected', 'disconnected', 'expired', 'error', 'configuration_required'],
       default: 'disconnected'
     },
+    credentials: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
     encryptedCredentials: {
       type: mongoose.Schema.Types.Mixed,
       select: false
