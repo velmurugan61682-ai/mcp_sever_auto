@@ -204,6 +204,15 @@ import { UnifiedMessage } from '../models/UnifiedMessage.js';
 // @route   GET /api/inbox/conversations/:conversationId/messages
 export const getInboxConversationMessagesController = asyncWrapper(async (req, res) => {
   const { conversationId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+    return res.status(200).json({
+      success: true,
+      count: 0,
+      messages: []
+    });
+  }
+
   const messages = await UnifiedMessage.find({
     user: req.user._id,
     conversationId

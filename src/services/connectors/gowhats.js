@@ -8,7 +8,7 @@ export class GoWhatsConnector {
   constructor(apiKey, webhookSecret) {
     this.apiKey = apiKey;
     this.webhookSecret = webhookSecret;
-    this.baseUrl = process.env.GOWHATS_API_URL || 'https://api.gowhats.in/v1';
+    this.baseUrl = process.env.GOWHATS_API_URL || '';
   }
 
   /**

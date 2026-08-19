@@ -211,6 +211,10 @@ export const processIncomingInboxEvent = async ({
  * Marks conversation as read, clears unread badge, and emits socket event
  */
 export const markConversationAsRead = async (userId, conversationId) => {
+  if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+    return null;
+  }
+
   const conversation = await UnifiedConversation.findOneAndUpdate(
     { _id: conversationId, user: userId },
     { $set: { unreadCount: 0 } },
