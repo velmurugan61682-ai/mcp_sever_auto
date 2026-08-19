@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
@@ -23,8 +23,17 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
-      default: 'user'
+      enum: ['owner', 'admin', 'manager', 'sales_manager', 'support_manager', 'finance_manager', 'agent', 'member', 'user'],
+      default: 'member'
+    },
+    workspaceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      index: true
+    },
+    permissions: {
+      type: [String],
+      default: []
     },
     settings: {
       defaultModel: { type: String, default: 'deepseek-chat' },

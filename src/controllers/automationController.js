@@ -1,4 +1,4 @@
-import { AutomationWorkflow } from '../models/AutomationWorkflow.js';
+﻿import { AutomationWorkflow } from '../models/AutomationWorkflow.js';
 import { AuditLog } from '../models/AuditLog.js';
 
 // GET /api/automations
@@ -42,6 +42,7 @@ export const createAutomation = async (req, res, next) => {
 
     await AuditLog.create({
       userId,
+      workspaceId: req.auth?.workspaceId,
       action: 'AUTOMATION_CREATED',
       category: 'automation',
       details: { workflowId: workflow._id, name: workflow.name }
@@ -73,6 +74,7 @@ export const toggleAutomation = async (req, res, next) => {
 
     await AuditLog.create({
       userId,
+      workspaceId: req.auth?.workspaceId,
       action: `AUTOMATION_${workflow.status.toUpperCase()}`,
       category: 'automation',
       details: { workflowId: id }
@@ -105,6 +107,7 @@ export const testAutomation = async (req, res, next) => {
 
     await AuditLog.create({
       userId,
+      workspaceId: req.auth?.workspaceId,
       action: 'AUTOMATION_TEST_RUN',
       category: 'automation',
       details: { workflowId: id, name: workflow.name }
@@ -137,6 +140,7 @@ export const deleteAutomation = async (req, res, next) => {
 
     await AuditLog.create({
       userId,
+      workspaceId: req.auth?.workspaceId,
       action: 'AUTOMATION_DELETED',
       category: 'automation',
       details: { workflowId: id }
@@ -150,3 +154,6 @@ export const deleteAutomation = async (req, res, next) => {
     next(error);
   }
 };
+
+
+

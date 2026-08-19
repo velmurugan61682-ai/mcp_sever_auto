@@ -14,6 +14,17 @@ import healthRoutes from './routes/healthRoutes.js';
 import crmRoutes from './routes/crmRoutes.js';
 import automationRoutes from './routes/automationRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import livekitRoutes from './routes/livekitRoutes.js';
+import appointmentRoutes from './routes/appointmentRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
+import socialRoutes from './routes/socialRoutes.js';
+import approvalRoutes from './routes/approvalRoutes.js';
+import knowledgeRoutes from './routes/knowledgeRoutes.js';
+import campaignRoutes from './routes/campaignRoutes.js';
+import voiceCallRoutes from './routes/voiceCallRoutes.js';
+import aiKeysRoutes from './routes/aiKeysRoutes.js';
+import buzzzAssistantRoutes from './routes/buzzzAssistantRoutes.js';
+import structuredActivityRoutes from './routes/structuredActivityRoutes.js';
 import { createBuiltinMCPServer, BUILTIN_TOOLS, BUILTIN_RESOURCES, BUILTIN_PROMPTS } from './mcp/server/mcpServer.js';
 
 const app = express();
@@ -76,6 +87,21 @@ app.use('/api/health', healthRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/automations', automationRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/livekit', livekitRoutes);
+
+// Buzzz Omnichannel Core Endpoints
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/agents', agentRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/approvals', approvalRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
+app.use('/api/campaigns', campaignRoutes);
+app.use('/api/calls', voiceCallRoutes);
+app.use('/api/voice', voiceCallRoutes);
+app.use('/api/settings/ai-keys', aiKeysRoutes);
+app.use('/api/buzz', buzzzAssistantRoutes);
+app.use('/api/activity', structuredActivityRoutes);
+
 app.get('/api/unified-inbox', protect, getUnifiedInboxController);
 app.get('/api/inbox/conversations/:conversationId/messages', protect, getInboxConversationMessagesController);
 app.patch('/api/inbox/conversations/:id/read', protect, markInboxConversationAsReadController);

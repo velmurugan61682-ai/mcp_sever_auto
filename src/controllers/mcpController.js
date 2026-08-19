@@ -1,4 +1,4 @@
-import { MCPServer } from '../models/MCPServer.js';
+﻿import { MCPServer } from '../models/MCPServer.js';
 import { MCPTool } from '../models/MCPTool.js';
 import { connectionManager } from '../mcp/client/connectionManager.js';
 import { safeExecuteTool } from '../mcp/client/toolExecutor.js';
@@ -66,6 +66,7 @@ export const addServer = asyncWrapper(async (req, res) => {
 
   await AuditLog.create({
     userId: req.user._id,
+    workspaceId: req.auth?.workspaceId,
     action: 'MCP_SERVER_ADDED',
     category: 'mcp_connection',
     details: { serverId: server._id, name: server.name }
@@ -136,6 +137,7 @@ export const deleteServer = asyncWrapper(async (req, res) => {
 
   await AuditLog.create({
     userId: req.user._id,
+    workspaceId: req.auth?.workspaceId,
     action: 'MCP_SERVER_DELETED',
     category: 'mcp_connection',
     details: { serverId: req.params.id, name: server.name }
@@ -248,3 +250,4 @@ export const executeToolById = asyncWrapper(async (req, res) => {
 
   res.status(200).json({ success: true, ...result });
 });
+

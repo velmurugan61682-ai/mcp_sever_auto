@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 const crmLeadSchema = new mongoose.Schema(
   {
@@ -9,8 +9,10 @@ const crmLeadSchema = new mongoose.Schema(
       index: true
     },
     workspaceId: {
-      type: String,
-      default: 'default-workspace'
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+      index: true
     },
     name: {
       type: String,
@@ -69,6 +71,7 @@ const crmLeadSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-crmLeadSchema.index({ userId: 1, email: 1 });
+crmLeadSchema.index({ workspaceId: 1, email: 1 });
+crmLeadSchema.index({ workspaceId: 1, stage: 1, updatedAt: -1 });
 
 export const CRMLead = mongoose.model('CRMLead', crmLeadSchema);

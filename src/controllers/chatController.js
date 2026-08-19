@@ -1,4 +1,4 @@
-import { UnifiedConversation } from '../models/UnifiedConversation.js';
+﻿import { UnifiedConversation } from '../models/UnifiedConversation.js';
 import { UnifiedMessage } from '../models/UnifiedMessage.js';
 import { Conversation } from '../models/Conversation.js';
 import { Message } from '../models/Message.js';
@@ -250,6 +250,7 @@ export const sendMessage = asyncWrapper(async (req, res) => {
   // Log Audit
   await AuditLog.create({
     userId: req.user._id,
+    workspaceId: req.auth?.workspaceId,
     action: isAIReply ? 'AI_REPLY_SENT' : 'MANUAL_MESSAGE_SENT',
     category: 'app_connection',
     details: { conversationId, sourceApp: conversation.sourceApp, isAIReply: !!isAIReply }
@@ -358,3 +359,4 @@ export const regenerateMessage = asyncWrapper(async (req, res) => {
     message: assistantMessage
   });
 });
+

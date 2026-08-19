@@ -2,6 +2,8 @@ import { UnifiedConversation } from '../models/UnifiedConversation.js';
 import { UnifiedMessage } from '../models/UnifiedMessage.js';
 import { InboxSyncState } from '../models/InboxSyncState.js';
 import { ConnectedApp } from '../models/ConnectedApp.js';
+import { ProcessedEvent } from '../models/ProcessedEvent.js';
+
 import { APP_REGISTRY } from '../mcp/registry/appRegistry.js';
 import { fetchChannelbotCommentsToolDefinition, executeFetchChannelbotComments } from '../mcp/server/tools/channelbotTool.js';
 
@@ -43,6 +45,29 @@ export const processIncomingInboxEvent = async ({
 }) => {
   if (!userId || !platform || !platformEventId) {
     throw new Error('[inboxSyncService] userId, platform, and platformEventId are required');
+  }
+
+  // Idempotency: Deduplicate incoming events at the database level
+  const workspaceId = 'default-workspace';
+  const appConnectionId = connectionId || platform;
+  const externalEventId = platformEventId;
+
+  try {
+    await ProcessedEvent.create({
+      workspaceId,
+      appConnectionId,
+      externalEventId
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      console.log(`[Deduplication] Event already processed: ${workspaceId} + ${appConnectionId} + ${externalEventId}`);
+      return await UnifiedMessage.findOne({
+        user: userId,
+        sourceApp: platform.toLowerCase(),
+        externalMessageId: platformEventId
+      });
+    }
+    throw err;
   }
 
   const normalizedPlatform = platform.toLowerCase();
