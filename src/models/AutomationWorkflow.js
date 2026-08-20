@@ -1,78 +1,73 @@
 import mongoose from 'mongoose';
 
+const nodeSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    type: { type: String, required: true },
+    data: { type: mongoose.Schema.Types.Mixed, default: {} },
+    position: {
+      x: { type: Number, default: 0 },
+      y: { type: Number, default: 0 }
+    }
+  },
+  { _id: false }
+);
+
+const edgeSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    source: { type: String, required: true },
+    target: { type: String, required: true }
+  },
+  { _id: false }
+);
+
 const automationWorkflowSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
       index: true
     },
     workspaceId: {
-      type: String,
-      default: 'default-workspace'
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+      index: true
     },
     name: {
       type: String,
-      required: [true, 'Workflow name is required'],
+      default: 'Untitled Workflow Draft',
       trim: true
     },
     trigger: {
       type: String,
-      enum: [
-        'New message received',
-        'New lead created',
-        'Keyword detected',
-        'Scheduled time',
-        'Webhook received',
-        'Manual trigger',
-        'MCP resource updated'
-      ],
-      required: true
-    },
-    targetApp: {
-      type: String,
-      default: 'Custom MCP Server'
-    },
-    serverId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'MCPServer'
-    },
-    selectedTool: {
-      type: String,
-      default: ''
-    },
-    parameterMapping: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {}
-    },
-    conditions: [
-      {
-        field: String,
-        operator: String,
-        value: String
-      }
-    ],
-    actionsCount: {
-      type: Number,
-      default: 1
+      default: 'New message received'
     },
     status: {
       type: String,
-      enum: ['active', 'paused'],
-      default: 'active'
+      enum: ['draft', 'active', 'paused'],
+      default: 'draft',
+      index: true
     },
+    currentStep: {
+      type: Number,
+      default: 1
+    },
+    stepData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
+    nodes: [nodeSchema],
+    edges: [edgeSchema],
     executionsCount: {
       type: Number,
       default: 0
-    },
-    successRate: {
-      type: Number,
-      default: 100
     },
     lastExecutedAt: Date
   },
   { timestamps: true }
 );
 
-export const AutomationWorkflow = mongoose.model('AutomationWorkflow', automationWorkflowSchema);
+export const AutomationWorkflow = mongoose.models.AutomationWorkflow || mongoose.model('AutomationWorkflow', automationWorkflowSchema);
+export default AutomationWorkflow;

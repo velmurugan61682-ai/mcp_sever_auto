@@ -1,11 +1,12 @@
-﻿import { AutomationWorkflow } from '../models/AutomationWorkflow.js';
+import { AutomationWorkflow } from '../models/AutomationWorkflow.js';
 import { AuditLog } from '../models/AuditLog.js';
+import { StructuredActivity } from '../models/StructuredActivity.js';
 
-// GET /api/automations
 export const getAutomations = async (req, res, next) => {
   try {
-    const userId = req.user._id;
-    const automations = await AutomationWorkflow.find({ userId }).sort({ createdAt: -1 });
+    const workspaceId = req.workspaceId;
+    const query = workspaceId ? { workspaceId } : { userId: req.user._id };
+    const automations = await AutomationWorkflow.find(query).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -16,9 +17,122 @@ export const getAutomations = async (req, res, next) => {
   }
 };
 
-// POST /api/automations
+export const createDraftWorkflow = async (req, res, next) => {
+  try {
+    const workspaceId = req.workspaceId;
+    const userId = req.user._id;
+
+    const draft = await AutomationWorkflow.create({
+      workspaceId,
+      userId,
+      name: 'Untitled Workflow Draft',
+      trigger: 'New message received',
+      status: 'draft',
+      currentStep: 1,
+      nodes: [{ id: 'node-trigger-1', type: 'trigger', data: { triggerType: 'New message received' } }],
+      edges: []
+    });
+
+    await StructuredActivity.create({
+      workspaceId,
+      actorType: 'user',
+      actorId: userId,
+      action: 'CREATE_WORKFLOW_DRAFT',
+      outcome: 'success',
+      details: { workflowId: draft._id }
+    }).catch(() => {});
+
+    return res.status(201).json({
+      success: true,
+      workflow: draft
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateWorkflowStep = async (req, res, next) => {
+  try {
+    const workspaceId = req.workspaceId;
+    const { id } = req.params;
+    const { stepIndex, name, trigger, stepData, nodes, edges } = req.body;
+
+    const workflow = await AutomationWorkflow.findOne({ _id: id, workspaceId });
+    if (!workflow) {
+      return res.status(404).json({ success: false, message: 'Workflow draft not found.' });
+    }
+
+    if (stepIndex !== undefined) workflow.currentStep = stepIndex;
+    if (name) workflow.name = name;
+    if (trigger) {
+      workflow.trigger = trigger;
+      // Guarantee trigger node in nodes[0]
+      if (!workflow.nodes || workflow.nodes.length === 0) {
+        workflow.nodes = [{ id: 'node-trigger-1', type: 'trigger', data: { triggerType: trigger } }];
+      } else {
+        workflow.nodes[0] = { id: 'node-trigger-1', type: 'trigger', data: { triggerType: trigger } };
+      }
+    }
+    if (stepData) workflow.stepData = { ...(workflow.stepData || {}), ...stepData };
+    if (nodes) workflow.nodes = nodes;
+    if (edges) workflow.edges = edges;
+
+    await workflow.save();
+
+    return res.status(200).json({
+      success: true,
+      workflow
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const publishWorkflow = async (req, res, next) => {
+  try {
+    const workspaceId = req.workspaceId;
+    const { id } = req.params;
+
+    const workflow = await AutomationWorkflow.findOne({ _id: id, workspaceId });
+    if (!workflow) {
+      return res.status(404).json({ success: false, message: 'Workflow not found.' });
+    }
+
+    // Graph Validation
+    if (!workflow.name || workflow.name === 'Untitled Workflow Draft') {
+      return res.status(400).json({ success: false, message: 'Validation failed: Workflow must have a descriptive name before publishing.' });
+    }
+
+    const hasTriggerNode = workflow.nodes && workflow.nodes.some((n) => n.type === 'trigger');
+    if (!hasTriggerNode) {
+      return res.status(400).json({ success: false, message: 'Validation failed: Workflow graph must contain at least one valid trigger node.' });
+    }
+
+    workflow.status = 'active';
+    await workflow.save();
+
+    await StructuredActivity.create({
+      workspaceId,
+      actorType: 'user',
+      actorId: req.user?._id,
+      action: 'PUBLISH_WORKFLOW',
+      outcome: 'success',
+      details: { workflowId: id, name: workflow.name }
+    }).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: `Workflow '${workflow.name}' successfully published and active.`,
+      workflow
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createAutomation = async (req, res, next) => {
   try {
+    const workspaceId = req.workspaceId;
     const userId = req.user._id;
     const { name, trigger, targetApp, serverId, selectedTool, parameterMapping, conditions } = req.body;
 
@@ -27,22 +141,18 @@ export const createAutomation = async (req, res, next) => {
     }
 
     const workflow = await AutomationWorkflow.create({
+      workspaceId,
       userId,
       name,
       trigger,
-      targetApp: targetApp || 'Custom MCP Server',
-      serverId,
-      selectedTool: selectedTool || 'mcp_tool_execute',
-      parameterMapping: parameterMapping || {},
-      conditions: conditions || [],
       status: 'active',
-      executionsCount: 0,
-      successRate: 100
+      nodes: [{ id: '1', type: 'trigger', data: { triggerType: trigger } }],
+      edges: []
     });
 
     await AuditLog.create({
       userId,
-      workspaceId: req.auth?.workspaceId,
+      workspaceId,
       action: 'AUTOMATION_CREATED',
       category: 'automation',
       details: { workflowId: workflow._id, name: workflow.name }
@@ -58,13 +168,12 @@ export const createAutomation = async (req, res, next) => {
   }
 };
 
-// PUT /api/automations/:id/toggle
 export const toggleAutomation = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const workspaceId = req.workspaceId;
     const { id } = req.params;
 
-    const workflow = await AutomationWorkflow.findOne({ _id: id, userId });
+    const workflow = await AutomationWorkflow.findOne({ _id: id, workspaceId });
     if (!workflow) {
       return res.status(404).json({ success: false, message: 'Automation workflow not found' });
     }
@@ -73,8 +182,8 @@ export const toggleAutomation = async (req, res, next) => {
     await workflow.save();
 
     await AuditLog.create({
-      userId,
-      workspaceId: req.auth?.workspaceId,
+      userId: req.user._id,
+      workspaceId,
       action: `AUTOMATION_${workflow.status.toUpperCase()}`,
       category: 'automation',
       details: { workflowId: id }
@@ -90,13 +199,12 @@ export const toggleAutomation = async (req, res, next) => {
   }
 };
 
-// POST /api/automations/:id/test
 export const testAutomation = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const workspaceId = req.workspaceId;
     const { id } = req.params;
 
-    const workflow = await AutomationWorkflow.findOne({ _id: id, userId });
+    const workflow = await AutomationWorkflow.findOne({ _id: id, workspaceId });
     if (!workflow) {
       return res.status(404).json({ success: false, message: 'Automation workflow not found' });
     }
@@ -105,21 +213,12 @@ export const testAutomation = async (req, res, next) => {
     workflow.lastExecutedAt = new Date();
     await workflow.save();
 
-    await AuditLog.create({
-      userId,
-      workspaceId: req.auth?.workspaceId,
-      action: 'AUTOMATION_TEST_RUN',
-      category: 'automation',
-      details: { workflowId: id, name: workflow.name }
-    });
-
     return res.status(200).json({
       success: true,
-      message: `Workflow '${workflow.name}' test run completed successfully. Trigger: ${workflow.trigger}. Tool: ${workflow.selectedTool || 'default'}.`,
+      message: `Workflow '${workflow.name}' test run completed successfully. Trigger: ${workflow.trigger}.`,
       result: {
         status: 'executed',
-        timestamp: new Date().toISOString(),
-        mappedParameters: workflow.parameterMapping
+        timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
@@ -127,20 +226,19 @@ export const testAutomation = async (req, res, next) => {
   }
 };
 
-// DELETE /api/automations/:id
 export const deleteAutomation = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const workspaceId = req.workspaceId;
     const { id } = req.params;
 
-    const workflow = await AutomationWorkflow.findOneAndDelete({ _id: id, userId });
+    const workflow = await AutomationWorkflow.findOneAndDelete({ _id: id, workspaceId });
     if (!workflow) {
       return res.status(404).json({ success: false, message: 'Automation workflow not found' });
     }
 
     await AuditLog.create({
-      userId,
-      workspaceId: req.auth?.workspaceId,
+      userId: req.user._id,
+      workspaceId,
       action: 'AUTOMATION_DELETED',
       category: 'automation',
       details: { workflowId: id }
@@ -155,5 +253,13 @@ export const deleteAutomation = async (req, res, next) => {
   }
 };
 
-
-
+export default {
+  getAutomations,
+  createDraftWorkflow,
+  updateWorkflowStep,
+  publishWorkflow,
+  createAutomation,
+  toggleAutomation,
+  testAutomation,
+  deleteAutomation
+};

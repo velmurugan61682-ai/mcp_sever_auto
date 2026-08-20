@@ -25,6 +25,11 @@ import voiceCallRoutes from './routes/voiceCallRoutes.js';
 import aiKeysRoutes from './routes/aiKeysRoutes.js';
 import buzzzAssistantRoutes from './routes/buzzzAssistantRoutes.js';
 import structuredActivityRoutes from './routes/structuredActivityRoutes.js';
+
+import settingsRoutes from './api/settings.js';
+import integrationsRoutes from './api/integrations.js';
+import agentLibraryRoutes from './api/agentLibrary.js';
+
 import { createBuiltinMCPServer, BUILTIN_TOOLS, BUILTIN_RESOURCES, BUILTIN_PROMPTS } from './mcp/server/mcpServer.js';
 
 const app = express();
@@ -101,6 +106,12 @@ app.use('/api/voice', voiceCallRoutes);
 app.use('/api/settings/ai-keys', aiKeysRoutes);
 app.use('/api/buzz', buzzzAssistantRoutes);
 app.use('/api/activity', structuredActivityRoutes);
+
+// v1 OpenAPI Contract Endpoints
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/integrations', integrationsRoutes);
+app.use('/api/v1/agent-library', agentLibraryRoutes);
+app.use('/api/v1/workflows', automationRoutes);
 
 app.get('/api/unified-inbox', protect, getUnifiedInboxController);
 app.get('/api/inbox/conversations/:conversationId/messages', protect, getInboxConversationMessagesController);

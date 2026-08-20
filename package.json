@@ -10,7 +10,7 @@
     "agent": "node src/livekitAgent.js dev",
     "test:mcp": "node src/mcp/testMcp.js",
     "reset:integrations": "node src/resetScript.js",
-    "test": "node --test"
+    "test": "node --test src/tests/*.test.js"
   },
   "dependencies": {
     "@livekit/agents": "^1.6.3",
